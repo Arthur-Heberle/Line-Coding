@@ -1,11 +1,9 @@
 #include <esp_now.h>
 #include <WiFi.h>
 
-// REPLACE WITH YOUR RECEIVER MAC Address
-uint8_t broadcastAddress[] = {0x00, 0x70, 0x07, 0x25, 0x36, 0xa0}; // MAC ESP32 receptora
+//EMISSOR SLAVE
+uint8_t broadcastAddress[] = {0x00, 0x70, 0x07, 0x25, 0x36, 0xa0}; // MAC da recetora MASTER
 
-// Structure example to send data
-// Must match the receiver structure
 typedef struct struct_message {
   char a[32];
   int b;
@@ -13,61 +11,59 @@ typedef struct struct_message {
   bool d;
 } struct_message;
 
-// Create a struct_message called myData
 struct_message myData;
-
 esp_now_peer_info_t peerInfo;
 
-// Novo callback compatível com ESP32 Core 3.x+
 void OnDataSent(const wifi_tx_info_t *tx_info, esp_now_send_status_t status) {
-  Serial.print("\r\nLast Packet Send Status:\t");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+  // Retorno opcional para o Python saber se o ESP-NOW entregou com sucesso
+  if (status == ESP_NOW_SEND_SUCCESS) {
+    Serial.println("ESP_NOW_OK");
+  } else {
+    Serial.println("ESP_NOW_FAIL");
+  }
 }
  
 void setup() {
-  // Init Serial Monitor
   Serial.begin(115200);
- 
-  // Set device as a Wi-Fi Station
   WiFi.mode(WIFI_STA);
 
-  // Init ESP-NOW
   if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
     return;
   }
 
-  // Once ESPNow is successfully Init, we will register for Send CB to
-  // get the status of Trasnmitted packet
   esp_now_register_send_cb(OnDataSent);
   
-  // Register peer
   memcpy(peerInfo.peer_addr, broadcastAddress, 6);
   peerInfo.channel = 0;  
   peerInfo.encrypt = false;
   
-  // Add peer        
-  if (esp_now_add_peer(&peerInfo) != ESP_OK){
-    Serial.println("Failed to add peer");
-    return;
-  }
+  esp_now_add_peer(&peerInfo);
 }
  
 void loop() {
-  // Set values to send
-  strcpy(myData.a, "THIS IS A CHAR");
-  myData.b = random(10,00);
-  myData.c = 6.7;
-  myData.d = true;
-  
-  // Send message via ESP-NOW
-  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
-   
-  if (result == ESP_OK) {
-    Serial.println("Sent with success");
+  // Verifica se o Python enviou algo via Serial
+  if (Serial.available() > 0) {
+    // Lê a linha enviada pelo Python até o '\n'
+    String input = Serial.readStringUntil('\n');
+    
+    // Converte para array de char para podermos usar o strtok (separador)
+    char buf[128];
+    input.toCharArray(buf, sizeof(buf));
+    
+    // Separa os dados usando ";" como delimitador
+    char* token = strtok(buf, ";");
+    if (token != NULL) strcpy(myData.a, token);   // Texto
+    
+    token = strtok(NULL, ";");
+    if (token != NULL) myData.b = atoi(token);     // Inteiro
+    
+    token = strtok(NULL, ";");
+    if (token != NULL) myData.c = atof(token);     // Float
+    
+    token = strtok(NULL, ";");
+    if (token != NULL) myData.d = (atoi(token) == 1); // Bool (1 ou 0)
+    
+    // Envia o pacote estruturado via ESP-NOW
+    esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
   }
-  else {
-    Serial.println("Error sending the data");
-  }
-  delay(2000);
 }
