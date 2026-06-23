@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>8B6T Encoder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #080D1C;
+      --surface:      #0F1629;
+      --border:       #1E2D4A;
+      --accent:       #4F46E5;
+      --accent-hover: #4338CA;
+      --signal:       #F59E0B;
+      --text:         #E2E8F0;
+      --muted:        #64748B;
+      --error:        #EF4444;
+    }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Space Grotesk', system-ui, sans-serif;
+      min-height: 100vh;
+    }
+
+    body { padding: 52px 24px 80px; }
+
+    .container { max-width: 840px; margin: 0 auto; }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 52px;
+    }
+
+    .logo {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: -1px;
+      white-space: nowrap;
+    }
+    .logo .a { color: var(--accent); }
+
+    .header-line {
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(to right, var(--border), transparent);
+      margin: 0 24px;
+    }
+
+    .header-tag {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    /* ── Form ── */
+    .form-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .field.grow { flex: 1; }
+    .field.key-col { width: 210px; }
+
+    label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    input[type="text"] {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      padding: 13px 16px;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      width: 100%;
+    }
+
+    input[type="text"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+    }
+
+    input[type="text"]::placeholder { color: var(--muted); opacity: 0.6; }
+
+    .form-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 36px;
+    }
+
+    .btn {
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      padding: 13px 40px;
+      transition: background 0.15s, opacity 0.15s;
+    }
+
+    .btn:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    .err {
+      font-size: 13px;
+      color: var(--error);
+      display: none;
+    }
+    .err.show { display: block; }
+
+    /* ── Results ── */
+    .results {
+      display: none;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .results.show {
+      display: block;
+      animation: appear 0.25s ease;
+    }
+
+    @keyframes appear {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .block {
+      padding: 22px 24px;
+    }
+    .block + .block { border-top: 1px solid var(--border); }
+
+    .block-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+
+    .data-box {
+      background: var(--bg);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      padding: 14px 16px;
+      word-break: break-all;
+    }
+
+    .data-box.scroll {
+      max-height: 140px;
+      overflow-y: auto;
+    }
+
+    .dim { color: var(--muted); }
+
+    /* ── Waveform ── */
+    .wave-wrap {
+      position: relative;
+      background: #050910;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    /* CRT scan-line texture */
+    .wave-wrap::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent 0px, transparent 3px,
+        rgba(0,0,0,0.07) 3px, rgba(0,0,0,0.07) 4px
+      );
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .wave-scroll { overflow-x: auto; }
+
+    canvas { display: block; }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar { height: 4px; width: 4px; }
+    ::-webkit-scrollbar-track { background: var(--surface); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .results.show { animation: none; }
+    }
+
+    @media (max-width: 560px) {
+      .form-row { flex-direction: column; }
+      .field.key-col { width: 100%; }
+      .logo { font-size: 24px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="logo">8<span class="a">B</span>6<span class="a">T</span></div>
+    <div class="header-line"></div>
+    <div class="header-tag">Signal Encoder</div>
+  </header>
+
+  <div class="form-row">
+    <div class="field grow">
+      <label for="msg">Mensagem</label>
+      <input type="text" id="msg" placeholder="Digite a mensagem a codificar…">
+    </div>
+    <div class="field key-col">
+      <label for="key">Chave Vigenère</label>
+      <input type="text" id="key" placeholder="Chave secreta">
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <button class="btn" id="btn" onclick="encode()">Codificar</button>
+    <span class="err" id="err"></span>
+  </div>
+
+  <div class="results" id="results">
+    <div class="block">
+      <div class="block-label">Texto Cifrado</div>
+      <div class="data-box" id="encText"></div>
+    </div>
+    <div class="block">
+      <div class="block-label">Binário</div>
+      <div class="data-box scroll" id="binText"></div>
+    </div>
+    <div class="block">
+      <div class="block-label" id="waveLabel">Forma de Onda — Trits</div>
+      <div class="wave-wrap">
+        <div class="wave-scroll">
+          <canvas id="wave"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script>
+  ['msg', 'key'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', e => {
+      if (e.key === 'Enter') encode();
+    });
+  });
+
+  async function encode() {
+    const msg = document.getElementById('msg').value;
+    const key = document.getElementById('key').value;
+    const errEl = document.getElementById('err');
+    const btn   = document.getElementById('btn');
+
+    errEl.classList.remove('show');
+
+    if (!msg.trim()) { setErr('Digite uma mensagem.'); return; }
+    if (!key.trim()) { setErr('Digite uma chave de criptografia.'); return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Codificando…';
+
+    try {
+      const res = await fetch('/encode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg, key })
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || `Erro ${res.status}`);
+      render(body);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Codificar';
+    }
+  }
+
+  function setErr(msg) {
+    const el = document.getElementById('err');
+    el.textContent = msg;
+    el.classList.add('show');
+  }
+
+  function render({ encrypted_text, binary, trits }) {
+    // Encrypted text
+    document.getElementById('encText').innerHTML =
+      [...encrypted_text].map(ch => {
+        const c = ch.charCodeAt(0);
+        const printable = (c >= 32 && c !== 127) && !(c >= 128 && c <= 159);
+        if (!printable) {
+          const hex = c.toString(16).toUpperCase().padStart(2, '0');
+          return `<span class="dim">\\x${hex}</span>`;
+        }
+        return ch.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }).join('');
+
+    // Binary — groups of 8
+    document.getElementById('binText').textContent =
+      binary.match(/.{1,8}/g).join(' ');
+
+    // Waveform label with count
+    document.getElementById('waveLabel').textContent =
+      `Forma de Onda — Trits (${trits.length})`;
+
+    // Reveal results
+    document.getElementById('results').classList.add('show');
+
+    drawWave(trits);
+  }
+
+  function drawWave(trits) {
+    const TW   = 28;   // trit width in pixels
+    const ML   = 52;   // left margin (Y labels)
+    const MR   = 20;   // right margin
+    const H    = 160;  // canvas height
+    const Y1   = 28;   // y for +1
+    const Y0   = H / 2; // y for 0
+    const YN   = H - 28; // y for -1
+
+    const yOf = t => t === 1 ? Y1 : t === 0 ? Y0 : YN;
+
+    const canvas = document.getElementById('wave');
+    canvas.width  = ML + trits.length * TW + MR;
+    canvas.height = H;
+
+    const ctx = canvas.getContext('2d');
+
+    // Background
+    ctx.fillStyle = '#050910';
+    ctx.fillRect(0, 0, canvas.width, H);
+
+    // Y-axis separator
+    ctx.strokeStyle = '#1A2845';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(ML - 6, 8);
+    ctx.lineTo(ML - 6, H - 8);
+    ctx.stroke();
+
+    // Horizontal grid lines
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 6]);
+    [[Y1, '#1A2E50'], [Y0, '#1E3560'], [YN, '#1A2E50']].forEach(([y, color]) => {
+      ctx.strokeStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(ML, y);
+      ctx.lineTo(canvas.width - MR, y);
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+
+    // Y-axis labels
+    ctx.font = '500 10px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#4A5C7A';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('+1', ML - 12, Y1);
+    ctx.fillText(' 0', ML - 12, Y0);
+    ctx.fillText('−1', ML - 12, YN);
+
+    // Animated signal
+    let drawn = 0;
+    const SPEED = 6; // trits per frame
+
+    function frame() {
+      if (drawn >= trits.length) return;
+
+      const end = Math.min(drawn + SPEED, trits.length);
+
+      ctx.beginPath();
+      ctx.lineWidth   = 2;
+      ctx.lineJoin    = 'miter';
+      ctx.strokeStyle = '#F59E0B';
+      ctx.shadowColor = '#F59E0B';
+      ctx.shadowBlur  = 10;
+
+      for (let i = drawn; i < end; i++) {
+        const x  = ML + i * TW;
+        const y  = yOf(trits[i]);
+        const xe = x + TW;
+
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          const py = yOf(trits[i - 1]);
+          if (i === drawn) ctx.moveTo(x, py); // resume from end of last frame
+          if (py !== y)    ctx.lineTo(x, y);  // vertical transition
+        }
+        ctx.lineTo(xe, y); // horizontal segment
+      }
+
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      drawn = end;
+      requestAnimationFrame(frame);
+    }
+
+    requestAnimationFrame(frame);
+  }
+</script>
+</body>
+</html>
