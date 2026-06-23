@@ -2,7 +2,7 @@ import serial
 import time
 
 # Troque para a porta do computador do SEU AMIGO
-PORTA = 'COM5' 
+PORTA = '/dev/ttyACM0' 
 VELOCIDADE = 115200
 
 try:
