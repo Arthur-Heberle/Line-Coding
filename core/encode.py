@@ -9,7 +9,7 @@ def textToBinary(message: str) -> str:
     return "".join(format(byte, "08b") for byte in message.encode("utf-8"))
 
 
-def binaryToTrits(binary_message: str, table_path: str = "") -> list[int]:
+def binaryToTrits(binary_message: str, table_path: str = "/core/tabela_8b6t.csv") -> list[int]:
     if not table_path:
         table_path = os.path.join(_TABLE_DIR, "tabela_8b6t.csv")
     binary_message = "".join(binary_message.split())
@@ -50,12 +50,12 @@ def binaryToTrits(binary_message: str, table_path: str = "") -> list[int]:
     return trits
 
 
-def tritsToBinary(trits: list[int], table_path: str = "") -> str:
+def tritsToBinary(trits: list[int], table_path: str = "/core/tabela_8b6t.csv") -> str:
     if not table_path:
-        table_path = os.path.join(_TABLE_DIR, "tabela_8b6t.csv")
+        table_path = os.path.join(_TABLE_DIR, "/core/tabela_8b6t.csv")
 
     if any(trinary not in [-1,0,1] for trinary in trits):
-        raise ValueError("Binary message must contain only 0 and 1.")
+        raise ValueError("Trinary message must contain only -1, 0 and 1.")
 
     if len(trits) % 6 != 0:
         raise ValueError("Trinary message must have a length multiple of 6.")
@@ -68,7 +68,9 @@ def tritsToBinary(trits: list[int], table_path: str = "") -> str:
             reader = csv.DictReader(file)
             for line in reader:
                 byte = format(int(line["byte"]), "08b")
-                table[byte] = [int(line[f"t{i}"]) for i in range(1, 7)]
+                trinary_list = [str(line[f"t{i}"]) for i in range(1, 7)]
+                trinary = "".join(trinary_list)
+                table[trinary] = byte
     else:
         with path_to_table.open(encoding="utf-8") as file:
             for line in file:
@@ -77,15 +79,17 @@ def tritsToBinary(trits: list[int], table_path: str = "") -> str:
                     continue
 
                 byte = parts[0]
-                table[byte] = [
-                    -1 if trit == "-" else 1 if trit == "+" else 0
+                trinary_list = ["-1" if trit == "-" else "1" if trit == "+" else "0"
                     for trit in parts[1:7]
                 ]
+                trinary = "".join(trinary_list)
+                table[trinary] = byte
 
-    trits = []
+    binary = ""
     for i in range(0, len(trits), 6):
-        byte = trits[i : i + 8]
-        trits.extend(table[byte])
+        trinary_list = trits[i : i + 6]
+        trinary = "".join(map(str, trinary_list))
+        binary.join(table[trinary])
 
     return trits
 
@@ -127,3 +131,11 @@ def decode_message(encoded_message: str, encode_key: str) -> str:
 
     return output
 
+if __name__ == "__main__":
+    message = input("Digite uma mensagem: ")
+    binary = textToBinary(message)
+    trinary = binaryToTrits(binary, "core/tabela_8b6t.csv")
+
+    print(binary)
+    print(trinary)
+    print(tritsToBinary(trinary, "core/tabela_8b6t.csv"))

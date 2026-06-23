@@ -6,7 +6,7 @@ import time
 
 # --- CONFIGURAÇÃO DA PORTA SERIAL DO RECEPTOR ---
 # IMPORTANTE: Mude para a porta do seu ESP32 Receptor (no log era COM3)
-PORTA_SERIAL = 'COM3' 
+PORTA_SERIAL = '/dev/ttyACM0' 
 BAUD_RATE = 115200
 
 # Variável global para controle da conexão
