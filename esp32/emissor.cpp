@@ -1,73 +1,65 @@
 #include <esp_now.h>
 #include <WiFi.h>
 
-// REPLACE WITH YOUR RECEIVER MAC Address
-uint8_t broadcastAddress[] = {0x00, 0x70, 0x07, 0x25, 0x36, 0xa0}; // MAC ESP32 receptora
+uint8_t masterMac[] = {0x00, 0x70, 0x07, 0x25, 0x36, 0xA0};
 
-// Structure example to send data
-// Must match the receiver structure
-typedef struct struct_message {
-  char a[32];
-  int b;
-  float c;
-  bool d;
-} struct_message;
+esp_now_peer_info_t peerInfo = {};
 
-// Create a struct_message called myData
-struct_message myData;
-
-esp_now_peer_info_t peerInfo;
-
-// Novo callback compatível com ESP32 Core 3.x+
-void OnDataSent(const wifi_tx_info_t *tx_info, esp_now_send_status_t status) {
-  Serial.print("\r\nLast Packet Send Status:\t");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+void onDataSent(const wifi_tx_info_t *tx_info, esp_now_send_status_t status) {
+  Serial.print("ESP-NOW send: ");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "ok" : "fail");
 }
- 
+
 void setup() {
-  // Init Serial Monitor
   Serial.begin(115200);
- 
-  // Set device as a Wi-Fi Station
+  Serial.setTimeout(100);
+
   WiFi.mode(WIFI_STA);
 
-  // Init ESP-NOW
   if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
+    Serial.println("ESP-NOW init failed");
     return;
   }
 
-  // Once ESPNow is successfully Init, we will register for Send CB to
-  // get the status of Trasnmitted packet
-  esp_now_register_send_cb(OnDataSent);
-  
-  // Register peer
-  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-  peerInfo.channel = 0;  
+  esp_now_register_send_cb(onDataSent);
+
+  memcpy(peerInfo.peer_addr, masterMac, 6);
+  peerInfo.channel = 0;
   peerInfo.encrypt = false;
-  
-  // Add peer        
-  if (esp_now_add_peer(&peerInfo) != ESP_OK){
-    Serial.println("Failed to add peer");
+
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    Serial.println("ESP-NOW peer add failed");
     return;
   }
+
+  Serial.println("ESP32 Slave bridge ready");
 }
- 
+
 void loop() {
-  // Set values to send
-  strcpy(myData.a, "THIS IS A CHAR");
-  myData.b = random(10,00);
-  myData.c = 6.7;
-  myData.d = true;
-  
-  // Send message via ESP-NOW
-  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
-   
-  if (result == ESP_OK) {
-    Serial.println("Sent with success");
+  if (!Serial.available()) {
+    delay(5);
+    return;
   }
-  else {
-    Serial.println("Error sending the data");
+
+  String line = Serial.readStringUntil('\n');
+  line.trim();
+
+  if (line.length() == 0) {
+    return;
   }
-  delay(2000);
+
+  if (line.length() > 240) {
+    Serial.println("Serial line too large for simple ESP-NOW mode");
+    return;
+  }
+
+  esp_err_t result = esp_now_send(masterMac, (const uint8_t *)line.c_str(), line.length());
+
+  Serial.print("Forwarded bytes: ");
+  Serial.println(line.length());
+
+  if (result != ESP_OK) {
+    Serial.print("esp_now_send error: ");
+    Serial.println(result);
+  }
 }

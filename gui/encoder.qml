@@ -54,6 +54,15 @@ ApplicationWindow {
         }
     }
 
+    Connections {
+        target: serialBridge
+
+        function onErrorOccurred(msg) {
+            errorLabel.text    = msg
+            errorLabel.visible = true
+        }
+    }
+
     // ── Scrollable main content ───────────────────────────────────────────────
     Flickable {
         id: mainFlick
@@ -135,7 +144,7 @@ ApplicationWindow {
                             color: root.muted
                             font.pixelSize: 10
                             font.letterSpacing: 2
-                            font.weight: Font.SemiBold
+            font.bold: true
                         }
 
                         TextField {
@@ -169,7 +178,7 @@ ApplicationWindow {
                             color: root.muted
                             font.pixelSize: 10
                             font.letterSpacing: 2
-                            font.weight: Font.SemiBold
+                            font.bold: true
                         }
 
                         TextField {
@@ -226,7 +235,7 @@ ApplicationWindow {
                             text: parent.text
                             color: "white"
                             font.pixelSize: 14
-                            font.weight: Font.SemiBold
+                            font.bold: true
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
@@ -242,6 +251,150 @@ ApplicationWindow {
                     }
 
                     Item { Layout.fillWidth: true }
+                }
+            }
+
+            Item { width: 1; height: 24 }
+
+            // ── Serial controls ───────────────────────────────────────────────
+            Item {
+                width: parent.width
+                height: serialRow.implicitHeight
+
+                RowLayout {
+                    id: serialRow
+                    anchors { left: parent.left; right: parent.right
+                              leftMargin: 40; rightMargin: 40 }
+                    spacing: 12
+
+                    ColumnLayout {
+                        Layout.preferredWidth: 220
+                        spacing: 8
+
+                        Text {
+                            text: "PORTA SERIAL"
+                            color: root.muted
+                            font.pixelSize: 10
+                            font.letterSpacing: 2
+                            font.bold: true
+                        }
+
+                        TextField {
+                            id: portInput
+                            Layout.fillWidth: true
+                            text: "/dev/ttyACM0"
+                            color: root.txt
+                            placeholderTextColor: root.muted
+                            font.family: root.fontMono
+                            font.pixelSize: 14
+                            leftPadding: 14; rightPadding: 14
+                            topPadding: 12;  bottomPadding: 12
+
+                            background: Rectangle {
+                                color: root.surface
+                                radius: 8
+                                border.color: parent.activeFocus ? root.accent : root.border
+                                border.width: 1
+                            }
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.preferredWidth: 120
+                        spacing: 8
+
+                        Text {
+                            text: "BAUD"
+                            color: root.muted
+                            font.pixelSize: 10
+                            font.letterSpacing: 2
+                            font.bold: true
+                        }
+
+                        TextField {
+                            id: baudInput
+                            Layout.fillWidth: true
+                            text: "115200"
+                            color: root.txt
+                            placeholderTextColor: root.muted
+                            font.family: root.fontMono
+                            font.pixelSize: 14
+                            leftPadding: 14; rightPadding: 14
+                            topPadding: 12;  bottomPadding: 12
+
+                            background: Rectangle {
+                                color: root.surface
+                                radius: 8
+                                border.color: parent.activeFocus ? root.accent : root.border
+                                border.width: 1
+                            }
+                        }
+                    }
+
+                    Button {
+                        id: connectBtn
+                        text: serialBridge !== null && serialBridge.connected ? "Desconectar" : "Conectar"
+                        implicitHeight: 44
+                        Layout.alignment: Qt.AlignBottom
+                        leftPadding: 24; rightPadding: 24
+
+                        background: Rectangle {
+                            color: parent.down || parent.hovered ? root.accentHover : root.accent
+                            radius: 8
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            font.pixelSize: 14
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        onClicked: {
+                            if (serialBridge.connected)
+                                serialBridge.disconnectSerial()
+                            else
+                                serialBridge.connectSerial(portInput.text, baudInput.text)
+                        }
+                    }
+
+                    Button {
+                        id: sendBtn
+                        text: "Enviar TRITS"
+                        implicitHeight: 44
+                        Layout.alignment: Qt.AlignBottom
+                        enabled: serialBridge !== null && serialBridge.connected && encoder.payload.length > 0
+                        leftPadding: 24; rightPadding: 24
+
+                        background: Rectangle {
+                            color: !parent.enabled ? root.border
+                                 : parent.down || parent.hovered ? root.accentHover
+                                 : root.accent
+                            radius: 8
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: parent.enabled ? "white" : root.muted
+                            font.pixelSize: 14
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        onClicked: serialBridge.sendPayload(encoder.payload)
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignBottom
+                        text: serialBridge !== null ? serialBridge.status : "Desconectado."
+                        color: root.muted
+                        font.pixelSize: 12
+                        wrapMode: Text.WrapAnywhere
+                    }
                 }
             }
 
@@ -276,7 +429,7 @@ ApplicationWindow {
                             color: root.accent
                             font.pixelSize: 10
                             font.letterSpacing: 2.5
-                            font.weight: Font.SemiBold
+                            font.bold: true
                         }
 
                         ScrollView {
@@ -314,7 +467,7 @@ ApplicationWindow {
                             color: root.accent
                             font.pixelSize: 10
                             font.letterSpacing: 2.5
-                            font.weight: Font.SemiBold
+                            font.bold: true
                         }
 
                         ScrollView {
@@ -353,7 +506,7 @@ ApplicationWindow {
                             color: root.accent
                             font.pixelSize: 10
                             font.letterSpacing: 2.5
-                            font.weight: Font.SemiBold
+                            font.bold: true
                         }
 
                         // Waveform container

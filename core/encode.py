@@ -1,27 +1,24 @@
 import csv
-import os
 from pathlib import Path
 
-_TABLE_DIR = os.path.dirname(os.path.abspath(__file__))
+_TABLE_DIR = Path(__file__).resolve().parent
+_DEFAULT_TABLE = _TABLE_DIR / "tabela_8b6t.csv"
 
 
-def textToBinary(message: str) -> str:
-    return "".join(format(byte, "08b") for byte in message.encode("utf-8"))
-
-
-def binaryToTrits(binary_message: str, table_path: str = "/core/tabela_8b6t.csv") -> list[int]:
+def _resolve_table_path(table_path: str = "") -> Path:
     if not table_path:
-        table_path = os.path.join(_TABLE_DIR, "tabela_8b6t.csv")
-    binary_message = "".join(binary_message.split())
+        return _DEFAULT_TABLE
 
-    if any(bit not in "01" for bit in binary_message):
-        raise ValueError("Binary message must contain only 0 and 1.")
+    path = Path(table_path)
+    if path.is_absolute():
+        return path
 
-    if len(binary_message) % 8 != 0:
-        raise ValueError("Binary message must have a length multiple of 8.")
+    return Path.cwd() / path
 
-    table = {}
-    path_to_table = Path(table_path)
+
+def _read_8b6t_table(table_path: str = "") -> dict[str, list[int]]:
+    table: dict[str, list[int]] = {}
+    path_to_table = _resolve_table_path(table_path)
 
     if path_to_table.suffix == ".csv":
         with path_to_table.open(newline="", encoding="utf-8") as file:
@@ -42,6 +39,40 @@ def binaryToTrits(binary_message: str, table_path: str = "/core/tabela_8b6t.csv"
                     for trit in parts[1:7]
                 ]
 
+    return table
+
+
+def textToBinary(message: str) -> str:
+    return "".join(format(byte, "08b") for byte in message.encode("utf-8"))
+
+
+def binaryToText(binary_message: str) -> str:
+    binary_message = "".join(binary_message.split())
+
+    if any(bit not in "01" for bit in binary_message):
+        raise ValueError("Binary message must contain only 0 and 1.")
+
+    if len(binary_message) % 8 != 0:
+        raise ValueError("Binary message must have a length multiple of 8.")
+
+    data = bytes(
+        int(binary_message[i : i + 8], 2)
+        for i in range(0, len(binary_message), 8)
+    )
+    return data.decode("utf-8")
+
+
+def binaryToTrits(binary_message: str, table_path: str = "") -> list[int]:
+    binary_message = "".join(binary_message.split())
+
+    if any(bit not in "01" for bit in binary_message):
+        raise ValueError("Binary message must contain only 0 and 1.")
+
+    if len(binary_message) % 8 != 0:
+        raise ValueError("Binary message must have a length multiple of 8.")
+
+    table = _read_8b6t_table(table_path)
+
     trits = []
     for i in range(0, len(binary_message), 8):
         byte = binary_message[i : i + 8]
@@ -50,48 +81,25 @@ def binaryToTrits(binary_message: str, table_path: str = "/core/tabela_8b6t.csv"
     return trits
 
 
-def tritsToBinary(trits: list[int], table_path: str = "/core/tabela_8b6t.csv") -> str:
-    if not table_path:
-        table_path = os.path.join(_TABLE_DIR, "/core/tabela_8b6t.csv")
-
-    if any(trinary not in [-1,0,1] for trinary in trits):
+def tritsToBinary(trits: list[int], table_path: str = "") -> str:
+    if any(trinary not in (-1, 0, 1) for trinary in trits):
         raise ValueError("Trinary message must contain only -1, 0 and 1.")
 
     if len(trits) % 6 != 0:
         raise ValueError("Trinary message must have a length multiple of 6.")
 
-    table = {}
-    path_to_table = Path(table_path)
-
-    if path_to_table.suffix == ".csv":
-        with path_to_table.open(newline="", encoding="utf-8") as file:
-            reader = csv.DictReader(file)
-            for line in reader:
-                byte = format(int(line["byte"]), "08b")
-                trinary_list = [str(line[f"t{i}"]) for i in range(1, 7)]
-                trinary = "".join(trinary_list)
-                table[trinary] = byte
-    else:
-        with path_to_table.open(encoding="utf-8") as file:
-            for line in file:
-                parts = line.split()
-                if not parts:
-                    continue
-
-                byte = parts[0]
-                trinary_list = ["-1" if trit == "-" else "1" if trit == "+" else "0"
-                    for trit in parts[1:7]
-                ]
-                trinary = "".join(trinary_list)
-                table[trinary] = byte
-
+    table = _read_8b6t_table(table_path)
+    inverse_table = {tuple(value): byte for byte, value in table.items()}
     binary = ""
-    for i in range(0, len(trits), 6):
-        trinary_list = trits[i : i + 6]
-        trinary = "".join(map(str, trinary_list))
-        binary.join(table[trinary])
 
-    return trits
+    for i in range(0, len(trits), 6):
+        block = tuple(trits[i : i + 6])
+        try:
+            binary += inverse_table[block]
+        except KeyError as exc:
+            raise ValueError(f"Unknown 8B6T trit block: {block}") from exc
+
+    return binary
 
 
 def encodeMessage(message: str, encode_key: str) -> str:
