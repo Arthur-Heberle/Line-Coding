@@ -1,6 +1,10 @@
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from flask import Flask, request, jsonify, send_from_directory
-from encode import encodeMessage, textToBinary, binaryToTrits
+from core.encode import encodeMessage, textToBinary, binaryToTrits
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 APP_DIR = os.path.dirname(os.path.abspath(__file__))

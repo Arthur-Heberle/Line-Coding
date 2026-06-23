@@ -1,12 +1,17 @@
 import csv
+import os
 from pathlib import Path
+
+_TABLE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def textToBinary(message: str) -> str:
     return "".join(format(byte, "08b") for byte in message.encode("utf-8"))
 
 
-def binaryToTrits(binary_message: str, table_path: str = "tabela_8b6t.csv") -> list[int]:
+def binaryToTrits(binary_message: str, table_path: str = "") -> list[int]:
+    if not table_path:
+        table_path = os.path.join(_TABLE_DIR, "tabela_8b6t.csv")
     binary_message = "".join(binary_message.split())
 
     if any(bit not in "01" for bit in binary_message):
@@ -45,7 +50,9 @@ def binaryToTrits(binary_message: str, table_path: str = "tabela_8b6t.csv") -> l
     return trits
 
 
-def tritsToBinary(trits: list[int], table_path: str = "tabela_8b6t.csv") -> str:
+def tritsToBinary(trits: list[int], table_path: str = "") -> str:
+    if not table_path:
+        table_path = os.path.join(_TABLE_DIR, "tabela_8b6t.csv")
 
     if any(trinary not in [-1,0,1] for trinary in trits):
         raise ValueError("Binary message must contain only 0 and 1.")

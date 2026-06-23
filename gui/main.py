@@ -1,10 +1,13 @@
 import sys
 import os
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from PySide6.QtWidgets import QApplication
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtCore import QObject, Signal, Slot, Property, QUrl
 
-from encode import encodeMessage, textToBinary, binaryToTrits
+from core.encode import encodeMessage, textToBinary, binaryToTrits
 
 
 class Encoder(QObject):
