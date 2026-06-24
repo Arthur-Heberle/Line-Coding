@@ -4,9 +4,11 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import serial
-from PySide6.QtCore import QTimer
+from serial.tools import list_ports
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -14,12 +16,18 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QPushButton,
     QPlainTextEdit,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 
 from core.encode import binaryToText, decode_message, tritsToBinary
 from core.serial_protocol import parse_trits_line
+
+import os as _os
+import sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from widgets import WaveformWidget, waveform_scroll_area
 
 
 def display_text(text: str) -> str:
@@ -42,7 +50,7 @@ class ReceiverWindow(QMainWindow):
         self.timer.timeout.connect(self.read_serial)
 
         self.setWindowTitle("8B6T Signal Receiver")
-        self.resize(900, 720)
+        self.resize(900, 960)
 
         root = QWidget()
         root.setObjectName("root")
@@ -70,12 +78,24 @@ class ReceiverWindow(QMainWindow):
         controls.addWidget(self.label("BAUD"), 0, 1)
         controls.addWidget(self.label("CHAVE VIGENERE"), 0, 2)
 
-        self.port_input = QLineEdit("/dev/ttyACM0")
+        self.port_combo = QComboBox()
+        refresh_btn = QPushButton("⟳")
+        refresh_btn.setObjectName("refreshBtn")
+        refresh_btn.setFixedWidth(38)
+        refresh_btn.clicked.connect(self._refresh_ports)
+
+        port_widget = QWidget()
+        port_layout = QHBoxLayout(port_widget)
+        port_layout.setContentsMargins(0, 0, 0, 0)
+        port_layout.setSpacing(6)
+        port_layout.addWidget(self.port_combo)
+        port_layout.addWidget(refresh_btn)
+
         self.baud_input = QLineEdit("115200")
         self.key_input = QLineEdit()
         self.key_input.setPlaceholderText("Chave de decodificacao")
 
-        controls.addWidget(self.port_input, 1, 0)
+        controls.addWidget(port_widget, 1, 0)
         controls.addWidget(self.baud_input, 1, 1)
         controls.addWidget(self.key_input, 1, 2)
 
@@ -98,12 +118,25 @@ class ReceiverWindow(QMainWindow):
         self.encrypted_output = self.output_box()
         self.message_output = self.output_box()
 
+        self.waveform = WaveformWidget()
+        self._waveform_scroll = waveform_scroll_area(self.waveform)
+
         main.addWidget(self.section("LINHA BRUTA", self.raw_output))
         main.addWidget(self.section("TRITS RECEBIDOS", self.trits_output))
+
+        wave_sec = QWidget()
+        wl = QVBoxLayout(wave_sec)
+        wl.setContentsMargins(0, 0, 0, 0)
+        wl.setSpacing(8)
+        wl.addWidget(self.label("FORMA DE ONDA — TRITS"))
+        wl.addWidget(self._waveform_scroll)
+        main.addWidget(wave_sec)
+
         main.addWidget(self.section("BINARIO RECUPERADO", self.binary_output))
         main.addWidget(self.section("TEXTO CIFRADO RECUPERADO", self.encrypted_output))
         main.addWidget(self.section("MENSAGEM FINAL", self.message_output))
 
+        self._refresh_ports()
         self.apply_style()
 
     def label(self, text: str) -> QLabel:
@@ -115,7 +148,8 @@ class ReceiverWindow(QMainWindow):
         box = QPlainTextEdit()
         box.setReadOnly(True)
         box.setMaximumBlockCount(200)
-        box.setMinimumHeight(72)
+        box.setMinimumHeight(48)
+        box.setMaximumHeight(72)
         return box
 
     def section(self, title: str, box: QPlainTextEdit) -> QWidget:
@@ -127,6 +161,15 @@ class ReceiverWindow(QMainWindow):
         layout.addWidget(box)
         return widget
 
+    def _refresh_ports(self) -> None:
+        self.port_combo.clear()
+        ports = sorted(list_ports.comports(), key=lambda p: p.device)
+        if ports:
+            for p in ports:
+                self.port_combo.addItem(f"{p.device}  —  {p.description}", p.device)
+        else:
+            self.port_combo.addItem("Nenhuma porta encontrada", "")
+
     def toggle_connection(self) -> None:
         if self.serial_port and self.serial_port.is_open:
             self.disconnect_serial()
@@ -134,7 +177,7 @@ class ReceiverWindow(QMainWindow):
             self.connect_serial()
 
     def connect_serial(self) -> None:
-        port = self.port_input.text().strip()
+        port = self.port_combo.currentData() or ""
         if not port:
             self.set_status("Digite a porta serial do ESP32 Master.", error=True)
             return
@@ -174,6 +217,7 @@ class ReceiverWindow(QMainWindow):
 
     def process_line(self, line: str) -> None:
         self.raw_output.setPlainText(line)
+        self.waveform.setTrits([])
 
         key = self.key_input.text()
         if not key:
@@ -190,6 +234,7 @@ class ReceiverWindow(QMainWindow):
             return
 
         self.trits_output.setPlainText(",".join(str(trit) for trit in trits))
+        self.waveform.setTrits(trits)
         self.binary_output.setPlainText(" ".join(binary[i : i + 8] for i in range(0, len(binary), 8)))
         self.encrypted_output.setPlainText(display_text(encrypted))
         self.message_output.setPlainText(message)
@@ -255,6 +300,40 @@ class ReceiverWindow(QMainWindow):
             QPushButton:hover {
                 background: #4338CA;
             }
+            QComboBox {
+                background: #0F1629;
+                border: 1px solid #1E2D4A;
+                border-radius: 8px;
+                color: #E2E8F0;
+                font-family: JetBrains Mono, Courier New, monospace;
+                font-size: 13px;
+                padding: 10px 12px;
+            }
+            QComboBox:focus {
+                border-color: #4F46E5;
+            }
+            QComboBox::drop-down { border: none; width: 28px; }
+            QComboBox::down-arrow {
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 6px solid #64748B;
+                width: 0; height: 0;
+            }
+            QComboBox QAbstractItemView {
+                background: #0F1629;
+                border: 1px solid #1E2D4A;
+                color: #E2E8F0;
+                selection-background-color: #4F46E5;
+                outline: none;
+            }
+            #refreshBtn {
+                background: #1E2D4A;
+                border-radius: 8px;
+                color: #E2E8F0;
+                font-size: 16px;
+                padding: 10px 0;
+            }
+            #refreshBtn:hover { background: #2A3F66; }
             """
         )
 

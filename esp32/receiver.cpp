@@ -21,6 +21,9 @@ void setup() {
 
   WiFi.mode(WIFI_STA);
 
+  Serial.print("Receiver MAC: ");
+  Serial.println(WiFi.macAddress());
+  
   if (esp_now_init() != ESP_OK) {
     Serial.println("ESP-NOW init failed");
     return;

@@ -2,59 +2,247 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from PySide6.QtWidgets import QApplication
-from PySide6.QtQml import QQmlApplicationEngine
-from PySide6.QtCore import QObject, Signal, Slot, Property, QUrl
 import serial
+from serial.tools import list_ports
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QPushButton,
+    QPlainTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
+# 00:70:07:26:7d:bc
 
 from core.encode import encodeMessage, textToBinary, binaryToTrits
 from core.serial_protocol import format_trits_payload
+from widgets import WaveformWidget, waveform_scroll_area
 
 
-class Encoder(QObject):
-    dataChanged   = Signal()
-    errorOccurred = Signal(str)
-
+class SenderWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self._encrypted = ""
-        self._binary    = ""
-        self._trits: list = []
-        self._payload = ""
+        self.serial_port = None
+        self.payload = ""
 
-    @Property(str, notify=dataChanged)
-    def encrypted(self) -> str:
-        return self._encrypted
+        self.setWindowTitle("8B6T Signal Encoder")
+        self.resize(900, 720)
 
-    @Property(str, notify=dataChanged)
-    def binary(self) -> str:
-        return self._binary
+        root = QWidget()
+        root.setObjectName("root")
+        self.setCentralWidget(root)
 
-    @Property("QVariantList", notify=dataChanged)
-    def trits(self) -> list:
-        return self._trits
+        main = QVBoxLayout(root)
+        main.setContentsMargins(40, 36, 40, 36)
+        main.setSpacing(18)
 
-    @Property(str, notify=dataChanged)
-    def payload(self) -> str:
-        return self._payload
+        # ── Header ────────────────────────────────────────────────────────────
+        header = QHBoxLayout()
+        title = QLabel("8B6T")
+        title.setObjectName("title")
+        tag = QLabel("Signal Encoder")
+        tag.setObjectName("tag")
+        header.addWidget(title)
+        header.addStretch(1)
+        header.addWidget(tag)
+        main.addLayout(header)
 
-    @Slot(str, str)
-    def encode(self, message: str, key: str) -> None:
+        # ── Form: message + key ───────────────────────────────────────────────
+        form = QHBoxLayout()
+        form.setSpacing(12)
+
+        msg_col = QVBoxLayout()
+        msg_col.setSpacing(8)
+        msg_col.addWidget(self.label("MENSAGEM"))
+        self.msg_input = QLineEdit()
+        self.msg_input.setPlaceholderText("Digite a mensagem a codificar…")
+        self.msg_input.returnPressed.connect(self.encode)
+        msg_col.addWidget(self.msg_input)
+
+        key_col = QVBoxLayout()
+        key_col.setSpacing(8)
+        key_col.addWidget(self.label("CHAVE VIGENÈRE"))
+        self.key_input = QLineEdit()
+        self.key_input.setPlaceholderText("Chave secreta")
+        self.key_input.setFixedWidth(210)
+        self.key_input.returnPressed.connect(self.encode)
+        key_col.addWidget(self.key_input)
+
+        form.addLayout(msg_col)
+        form.addLayout(key_col)
+        main.addLayout(form)
+
+        # ── Encode button + error ─────────────────────────────────────────────
+        actions = QHBoxLayout()
+        actions.setSpacing(16)
+        encode_btn = QPushButton("Codificar")
+        encode_btn.clicked.connect(self.encode)
+        self.error_label = QLabel()
+        self.error_label.setObjectName("error")
+        self.error_label.setVisible(False)
+        actions.addWidget(encode_btn)
+        actions.addWidget(self.error_label)
+        actions.addStretch(1)
+        main.addLayout(actions)
+
+        # ── Serial controls ───────────────────────────────────────────────────
+        serial_row = QHBoxLayout()
+        serial_row.setSpacing(12)
+
+        port_col = QVBoxLayout()
+        port_col.setSpacing(8)
+        port_col.addWidget(self.label("PORTA SERIAL"))
+        self.port_combo = QComboBox()
+        refresh_btn = QPushButton("⟳")
+        refresh_btn.setObjectName("refreshBtn")
+        refresh_btn.setFixedWidth(38)
+        refresh_btn.clicked.connect(self._refresh_ports)
+        port_row = QHBoxLayout()
+        port_row.setSpacing(6)
+        port_row.addWidget(self.port_combo, 1)
+        port_row.addWidget(refresh_btn)
+        port_col.addLayout(port_row)
+
+        baud_col = QVBoxLayout()
+        baud_col.setSpacing(8)
+        baud_col.addWidget(self.label("BAUD"))
+        self.baud_input = QLineEdit("115200")
+        self.baud_input.setFixedWidth(120)
+        baud_col.addWidget(self.baud_input)
+
+        self.connect_btn = QPushButton("Conectar")
+        self.connect_btn.clicked.connect(self.toggle_connection)
+
+        self.send_btn = QPushButton("Enviar TRITS")
+        self.send_btn.setEnabled(False)
+        self.send_btn.clicked.connect(self.send_payload)
+
+        self.serial_status = QLabel("Desconectado.")
+        self.serial_status.setObjectName("status")
+
+        serial_row.addLayout(port_col)
+        serial_row.addLayout(baud_col)
+        serial_row.addWidget(self.connect_btn, 0, Qt.AlignmentFlag.AlignBottom)
+        serial_row.addWidget(self.send_btn, 0, Qt.AlignmentFlag.AlignBottom)
+        serial_row.addWidget(self.serial_status, 1, Qt.AlignmentFlag.AlignBottom)
+        main.addLayout(serial_row)
+
+        # ── Results panel (hidden until first encode) ─────────────────────────
+        self.results_panel = QFrame()
+        self.results_panel.setObjectName("resultsPanel")
+        self.results_panel.setVisible(False)
+
+        rp = QVBoxLayout(self.results_panel)
+        rp.setContentsMargins(22, 18, 22, 18)
+        rp.setSpacing(18)
+
+        self.encrypted_output = self.output_box()
+        self.encrypted_output.setMinimumHeight(54)
+        self.binary_output = self.output_box()
+        self.binary_output.setMinimumHeight(80)
+
+        self.waveform = WaveformWidget()
+        wave_scroll = waveform_scroll_area(self.waveform)
+
+        rp.addWidget(self.section("TEXTO CIFRADO", self.encrypted_output))
+
+        divider1 = QFrame()
+        divider1.setFrameShape(QFrame.Shape.HLine)
+        divider1.setObjectName("divider")
+        rp.addWidget(divider1)
+
+        rp.addWidget(self.section("BINÁRIO", self.binary_output))
+
+        divider2 = QFrame()
+        divider2.setFrameShape(QFrame.Shape.HLine)
+        divider2.setObjectName("divider")
+        rp.addWidget(divider2)
+
+        wave_sec = QWidget()
+        wl = QVBoxLayout(wave_sec)
+        wl.setContentsMargins(0, 0, 0, 0)
+        wl.setSpacing(8)
+        wl.addWidget(self.label("FORMA DE ONDA — TRITS"))
+        wl.addWidget(wave_scroll)
+        rp.addWidget(wave_sec)
+
+        main.addWidget(self.results_panel)
+        main.addStretch(1)
+
+        self._refresh_ports()
+        self.apply_style()
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def label(self, text: str) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setObjectName("fieldLabel")
+        return lbl
+
+    def output_box(self) -> QPlainTextEdit:
+        box = QPlainTextEdit()
+        box.setReadOnly(True)
+        box.setMaximumBlockCount(200)
+        return box
+
+    def section(self, title: str, box: QPlainTextEdit) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        layout.addWidget(self.label(title))
+        layout.addWidget(box)
+        return widget
+
+    def _refresh_ports(self) -> None:
+        self.port_combo.clear()
+        ports = sorted(list_ports.comports(), key=lambda p: p.device)
+        if ports:
+            for p in ports:
+                self.port_combo.addItem(f"{p.device}  —  {p.description}", p.device)
+        else:
+            self.port_combo.addItem("Nenhuma porta encontrada", "")
+
+    def show_error(self, msg: str) -> None:
+        self.error_label.setText(msg)
+        self.error_label.setVisible(True)
+
+    def set_serial_status(self, msg: str) -> None:
+        self.serial_status.setText(msg)
+
+    def _update_send_btn(self) -> None:
+        connected = self.serial_port is not None and self.serial_port.is_open
+        self.send_btn.setEnabled(connected and bool(self.payload))
+
+    # ── Encode ────────────────────────────────────────────────────────────────
+
+    def encode(self) -> None:
+        message = self.msg_input.text()
+        key = self.key_input.text()
+
         if not message.strip():
-            self.errorOccurred.emit("Digite uma mensagem.")
+            self.show_error("Digite uma mensagem.")
             return
         if not key.strip():
-            self.errorOccurred.emit("Digite uma chave de criptografia.")
+            self.show_error("Digite uma chave de criptografia.")
             return
 
         try:
-            enc   = encodeMessage(message, key)
-            bin_  = textToBinary(enc)
-            trits = binaryToTrits(bin_)
-            payload = format_trits_payload(trits)
+            enc    = encodeMessage(message, key)
+            bin_   = textToBinary(enc)
+            trits  = binaryToTrits(bin_)
+            self.payload = format_trits_payload(trits)
         except Exception as e:
-            self.errorOccurred.emit(str(e))
+            self.show_error(str(e))
             return
 
         display = ""
@@ -65,96 +253,175 @@ class Encoder(QObject):
             else:
                 display += f"\\x{c:02X}"
 
-        self._encrypted = display
-        self._binary    = bin_
-        self._trits     = trits
-        self._payload   = payload
-        self.dataChanged.emit()
+        self.encrypted_output.setPlainText(display)
+        self.binary_output.setPlainText(
+            " ".join(bin_[i : i + 8] for i in range(0, len(bin_), 8))
+        )
+        self.waveform.setTrits(trits)
 
+        self.results_panel.setVisible(True)
+        self.error_label.setVisible(False)
+        self._update_send_btn()
 
-class SerialBridge(QObject):
-    stateChanged = Signal()
-    errorOccurred = Signal(str)
+    # ── Serial ────────────────────────────────────────────────────────────────
 
-    def __init__(self):
-        super().__init__()
-        self._serial = None
-        self._status = "Desconectado."
+    def toggle_connection(self) -> None:
+        if self.serial_port and self.serial_port.is_open:
+            self.disconnect_serial()
+        else:
+            self.connect_serial()
 
-    @Property(bool, notify=stateChanged)
-    def connected(self) -> bool:
-        return self._serial is not None and self._serial.is_open
-
-    @Property(str, notify=stateChanged)
-    def status(self) -> str:
-        return self._status
-
-    @Slot(str, str)
-    def connectSerial(self, port: str, baud_rate: str) -> None:
-        port = port.strip()
+    def connect_serial(self) -> None:
+        port = self.port_combo.currentData() or ""
         if not port:
-            self.errorOccurred.emit("Digite a porta serial do ESP32 Slave.")
+            self.show_error("Digite a porta serial do ESP32.")
             return
-
         try:
-            baud = int(baud_rate.strip() or "115200")
-            self._serial = serial.Serial(port, baud, timeout=1)
-        except Exception as e:
-            self._serial = None
-            self._status = "Falha ao conectar."
-            self.stateChanged.emit()
-            self.errorOccurred.emit(f"Não foi possível abrir {port}: {e}")
+            baud = int(self.baud_input.text().strip() or "115200")
+            self.serial_port = serial.Serial(port, baud, timeout=1)
+        except Exception as exc:
+            self.serial_port = None
+            self.set_serial_status(f"Não foi possível abrir {port}: {exc}")
             return
+        self.connect_btn.setText("Desconectar")
+        self.set_serial_status(f"Conectado em {port} @ {baud}.")
+        self._update_send_btn()
 
-        self._status = f"Conectado em {port} @ {baud}."
-        self.stateChanged.emit()
+    def disconnect_serial(self) -> None:
+        if self.serial_port and self.serial_port.is_open:
+            self.serial_port.close()
+        self.serial_port = None
+        self.connect_btn.setText("Conectar")
+        self.set_serial_status("Desconectado.")
+        self._update_send_btn()
 
-    @Slot()
-    def disconnectSerial(self) -> None:
-        if self._serial and self._serial.is_open:
-            self._serial.close()
-
-        self._serial = None
-        self._status = "Desconectado."
-        self.stateChanged.emit()
-
-    @Slot(str)
-    def sendPayload(self, payload: str) -> None:
-        if not payload:
-            self.errorOccurred.emit("Codifique uma mensagem antes de enviar.")
+    def send_payload(self) -> None:
+        if not self.payload:
+            self.show_error("Codifique uma mensagem antes de enviar.")
             return
-
-        if not self.connected:
-            self.errorOccurred.emit("Conecte a porta serial do ESP32 Slave antes de enviar.")
+        if not (self.serial_port and self.serial_port.is_open):
+            self.show_error("Conecte a porta serial antes de enviar.")
             return
-
         try:
-            self._serial.write(payload.encode("utf-8"))
-            self._serial.flush()
-        except Exception as e:
-            self.errorOccurred.emit(f"Falha ao enviar pela serial: {e}")
+            self.serial_port.write(self.payload.encode("utf-8"))
+            self.serial_port.flush()
+        except Exception as exc:
+            self.show_error(f"Falha ao enviar: {exc}")
             return
+        self.set_serial_status(f"Enviado: {self.payload.strip()}")
 
-        self._status = f"Enviado: {payload.strip()}"
-        self.stateChanged.emit()
+    # ── Style ─────────────────────────────────────────────────────────────────
+
+    def apply_style(self) -> None:
+        self.setStyleSheet(
+            """
+            #root {
+                background: #080D1C;
+                color: #E2E8F0;
+                font-family: Ubuntu, Segoe UI, sans-serif;
+            }
+            QLabel {
+                color: #E2E8F0;
+            }
+            #title {
+                color: #E2E8F0;
+                font-family: JetBrains Mono, Courier New, monospace;
+                font-size: 30px;
+                font-weight: 700;
+            }
+            #tag, #fieldLabel {
+                color: #64748B;
+                font-size: 10px;
+                font-weight: 600;
+                letter-spacing: 2px;
+            }
+            #status {
+                color: #64748B;
+                font-size: 12px;
+            }
+            #error {
+                color: #EF4444;
+                font-size: 13px;
+            }
+            QLineEdit, QPlainTextEdit {
+                background: #0F1629;
+                border: 1px solid #1E2D4A;
+                border-radius: 8px;
+                color: #E2E8F0;
+                font-family: JetBrains Mono, Courier New, monospace;
+                font-size: 13px;
+                padding: 10px 12px;
+            }
+            QLineEdit:focus, QPlainTextEdit:focus {
+                border-color: #4F46E5;
+            }
+            QPushButton {
+                background: #4F46E5;
+                border: 0;
+                border-radius: 8px;
+                color: white;
+                font-size: 14px;
+                font-weight: 600;
+                padding: 12px 24px;
+            }
+            QPushButton:hover {
+                background: #4338CA;
+            }
+            QPushButton:disabled {
+                background: #1E2D4A;
+                color: #64748B;
+            }
+            QComboBox {
+                background: #0F1629;
+                border: 1px solid #1E2D4A;
+                border-radius: 8px;
+                color: #E2E8F0;
+                font-family: JetBrains Mono, Courier New, monospace;
+                font-size: 13px;
+                padding: 10px 12px;
+            }
+            QComboBox:focus {
+                border-color: #4F46E5;
+            }
+            QComboBox::drop-down { border: none; width: 28px; }
+            QComboBox::down-arrow {
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 6px solid #64748B;
+                width: 0; height: 0;
+            }
+            QComboBox QAbstractItemView {
+                background: #0F1629;
+                border: 1px solid #1E2D4A;
+                color: #E2E8F0;
+                selection-background-color: #4F46E5;
+                outline: none;
+            }
+            #refreshBtn {
+                background: #1E2D4A;
+                border-radius: 8px;
+                color: #E2E8F0;
+                font-size: 16px;
+                padding: 10px 0;
+            }
+            #refreshBtn:hover { background: #2A3F66; }
+            #resultsPanel {
+                background: #0F1629;
+                border: 1px solid #1E2D4A;
+                border-radius: 12px;
+            }
+            #divider {
+                color: #1E2D4A;
+            }
+            """
+        )
 
 
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("8B6T Signal Encoder")
-
-    engine = QQmlApplicationEngine()
-    encoder = Encoder()
-    serial_bridge = SerialBridge()
-    engine.rootContext().setContextProperty("encoder", encoder)
-    engine.rootContext().setContextProperty("serialBridge", serial_bridge)
-
-    qml_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "encoder.qml")
-    engine.load(QUrl.fromLocalFile(qml_file))
-
-    if not engine.rootObjects():
-        sys.exit(-1)
-
+    window = SenderWindow()
+    window.show()
     sys.exit(app.exec())
 
 
