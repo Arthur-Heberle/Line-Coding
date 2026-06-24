@@ -318,8 +318,8 @@ class SenderWindow(QMainWindow):
             self.show_error("Conecte a porta serial antes de enviar.")
             return
         try:
-            self.serial_port.flush()
             self.serial_port.write(self.payload.encode("utf-8"))
+            self.serial_port.flush()
         except Exception as exc:
             self.show_error(f"Falha ao enviar: {exc}")
             return

@@ -3,18 +3,14 @@
 #include <WiFi.h>
 
 void onDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingData, int len) {
-  String line = "";
-  line.reserve(len);
+  const int PREFIX_LEN = 6;  // "TRITS:"
+  if (len < PREFIX_LEN || memcmp(incomingData, "TRITS:", PREFIX_LEN) != 0) return;
 
-  for (int i = 0; i < len; i++) {
-    line += (char)incomingData[i];
-  }
-
-  line.trim();
-
-  if (line.length() > 0) {
-    Serial.println(line);
-  }
+  char buf[250];
+  int copy_len = (len < 249) ? len : 249;
+  memcpy(buf, incomingData, copy_len);
+  buf[copy_len] = '\0';
+  Serial.println(buf);
 }
 
 void setup() {

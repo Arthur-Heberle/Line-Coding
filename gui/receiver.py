@@ -226,7 +226,6 @@ class ReceiverWindow(QMainWindow):
 
     def process_line(self, line: str) -> None:
         self.raw_output.setPlainText(line)
-        self.waveform.setTrits([])
 
         key = self.key_input.text()
         if not key:
