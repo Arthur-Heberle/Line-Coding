@@ -1,68 +1,56 @@
 #include <esp_now.h>
-#include <esp_wifi.h>
 #include <WiFi.h>
 
-uint8_t masterMac[] = {0x00, 0x70, 0x07, 0x25, 0x36, 0xa0};
+// MAC da recetora MASTER
+uint8_t broadcastAddress[] = {0x00, 0x70, 0x07, 0x25, 0x36, 0xa0}; 
 
-esp_now_peer_info_t peerInfo = {};
+// Estrutura simplificada: apenas um grande buffer para a string do Python
+typedef struct struct_message {
+  char payload[240]; 
+} struct_message;
 
-void onDataSent(const wifi_tx_info_t *tx_info, esp_now_send_status_t status) {
-  Serial.print("ESP-NOW send: ");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "ok" : "fail");
+struct_message myData;
+esp_now_peer_info_t peerInfo;
+
+void OnDataSent(const wifi_tx_info_t *tx_info, esp_now_send_status_t status) {
+  if (status == ESP_NOW_SEND_SUCCESS) {
+    Serial.println("ESP_NOW_OK");
+  } else {
+    Serial.println("ESP_NOW_FAIL");
+  }
 }
-
+ 
 void setup() {
   Serial.begin(115200);
-  Serial.setTimeout(100);
-
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
-  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
 
   if (esp_now_init() != ESP_OK) {
-    Serial.println("ESP-NOW init failed");
     return;
   }
 
-  esp_now_register_send_cb(onDataSent);
-
-  memcpy(peerInfo.peer_addr, masterMac, 6);
-  peerInfo.channel = 1;
+  esp_now_register_send_cb(OnDataSent);
+  
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  peerInfo.channel = 0;  
   peerInfo.encrypt = false;
-
-  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-    Serial.println("ESP-NOW peer add failed");
-    return;
-  }
-
-  Serial.println("ESP32 Slave bridge ready");
+  
+  esp_now_add_peer(&peerInfo);
 }
-
+ 
 void loop() {
-  if (!Serial.available()) {
-    delay(5);
-    return;
-  }
-
-  String line = Serial.readStringUntil('\n');
-  line.trim();
-
-  if (line.length() == 0) {
-    return;
-  }
-
-  if (line.length() > 240) {
-    Serial.println("Serial line too large for simple ESP-NOW mode");
-    return;
-  }
-
-  esp_err_t result = esp_now_send(masterMac, (const uint8_t *)line.c_str(), line.length());
-
-  Serial.print("Forwarded bytes: ");
-  Serial.println(line.length());
-
-  if (result != ESP_OK) {
-    Serial.print("esp_now_send error: ");
-    Serial.println(result);
+  // Verifica se o Python (main.py) enviou algo via Serial
+  if (Serial.available() > 0) {
+    // Lê a linha até a quebra de linha (\n)
+    String input = Serial.readStringUntil('\n');
+    input.trim(); // Remove espaços vazios ou \r
+    
+    if (input.length() > 0) {
+      // Copia a string recebida para a nossa estrutura, garantindo o limite de 239 chars + nulo
+      strncpy(myData.payload, input.c_str(), sizeof(myData.payload) - 1);
+      myData.payload[sizeof(myData.payload) - 1] = '\0';
+      
+      // Envia o pacote via ESP-NOW
+      esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
+    }
   }
 }
