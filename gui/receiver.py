@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QPlainTextEdit,
     QScrollArea,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -54,7 +56,6 @@ class ReceiverWindow(QMainWindow):
 
         root = QWidget()
         root.setObjectName("root")
-        self.setCentralWidget(root)
 
         main = QVBoxLayout(root)
         main.setContentsMargins(40, 36, 40, 36)
@@ -121,20 +122,29 @@ class ReceiverWindow(QMainWindow):
         self.waveform = WaveformWidget()
         self._waveform_scroll = waveform_scroll_area(self.waveform)
 
-        main.addWidget(self.section("LINHA BRUTA", self.raw_output))
-        main.addWidget(self.section("TRITS RECEBIDOS", self.trits_output))
-
         wave_sec = QWidget()
         wl = QVBoxLayout(wave_sec)
         wl.setContentsMargins(0, 0, 0, 0)
         wl.setSpacing(8)
         wl.addWidget(self.label("FORMA DE ONDA — TRITS"))
         wl.addWidget(self._waveform_scroll)
-        main.addWidget(wave_sec)
 
-        main.addWidget(self.section("BINARIO RECUPERADO", self.binary_output))
-        main.addWidget(self.section("TEXTO CIFRADO RECUPERADO", self.encrypted_output))
-        main.addWidget(self.section("MENSAGEM FINAL", self.message_output))
+        splitter = QSplitter(Qt.Orientation.Vertical)
+        splitter.setChildrenCollapsible(False)
+        splitter.addWidget(self.section("LINHA BRUTA", self.raw_output))
+        splitter.addWidget(self.section("TRITS RECEBIDOS", self.trits_output))
+        splitter.addWidget(wave_sec)
+        splitter.addWidget(self.section("BINARIO RECUPERADO", self.binary_output))
+        splitter.addWidget(self.section("TEXTO CIFRADO RECUPERADO", self.encrypted_output))
+        splitter.addWidget(self.section("MENSAGEM FINAL", self.message_output))
+        splitter.setSizes([80, 80, 160, 80, 80, 80])
+        main.addWidget(splitter)
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(root)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.setCentralWidget(scroll_area)
 
         self._refresh_ports()
         self.apply_style()
@@ -148,8 +158,7 @@ class ReceiverWindow(QMainWindow):
         box = QPlainTextEdit()
         box.setReadOnly(True)
         box.setMaximumBlockCount(200)
-        box.setMinimumHeight(48)
-        box.setMaximumHeight(72)
+        box.setMinimumHeight(50)
         return box
 
     def section(self, title: str, box: QPlainTextEdit) -> QWidget:
@@ -334,6 +343,26 @@ class ReceiverWindow(QMainWindow):
                 padding: 10px 0;
             }
             #refreshBtn:hover { background: #2A3F66; }
+            QScrollArea { background: #080D1C; border: none; }
+            QScrollBar:vertical {
+                background: #0F1629;
+                width: 8px;
+                border-radius: 4px;
+                margin: 0;
+            }
+            QScrollBar::handle:vertical {
+                background: #1E2D4A;
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover { background: #4F46E5; }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+            QSplitter::handle:vertical {
+                background: #1E2D4A;
+                height: 4px;
+                margin: 2px 0;
+            }
+            QSplitter::handle:vertical:hover { background: #4F46E5; }
             """
         )
 

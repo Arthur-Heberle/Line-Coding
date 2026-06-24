@@ -1,4 +1,5 @@
 #include <esp_now.h>
+#include <esp_wifi.h>
 #include <WiFi.h>
 
 uint8_t masterMac[] = {0x00, 0x70, 0x07, 0x25, 0x36, 0xa0};
@@ -15,6 +16,8 @@ void setup() {
   Serial.setTimeout(100);
 
   WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
 
   if (esp_now_init() != ESP_OK) {
     Serial.println("ESP-NOW init failed");
@@ -24,7 +27,7 @@ void setup() {
   esp_now_register_send_cb(onDataSent);
 
   memcpy(peerInfo.peer_addr, masterMac, 6);
-  peerInfo.channel = 0;
+  peerInfo.channel = 1;
   peerInfo.encrypt = false;
 
   if (esp_now_add_peer(&peerInfo) != ESP_OK) {

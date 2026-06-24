@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import serial
 from serial.tools import list_ports
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QPushButton,
     QPlainTextEdit,
+    QScrollArea,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -33,13 +35,15 @@ class SenderWindow(QMainWindow):
         super().__init__()
         self.serial_port = None
         self.payload = ""
+        self.read_timer = QTimer(self)
+        self.read_timer.setInterval(50)
+        self.read_timer.timeout.connect(self._read_serial)
 
         self.setWindowTitle("8B6T Signal Encoder")
         self.resize(900, 720)
 
         root = QWidget()
         root.setObjectName("root")
-        self.setCentralWidget(root)
 
         main = QVBoxLayout(root)
         main.setContentsMargins(40, 36, 40, 36)
@@ -146,26 +150,10 @@ class SenderWindow(QMainWindow):
         rp.setSpacing(18)
 
         self.encrypted_output = self.output_box()
-        self.encrypted_output.setMinimumHeight(54)
         self.binary_output = self.output_box()
-        self.binary_output.setMinimumHeight(80)
 
         self.waveform = WaveformWidget()
         wave_scroll = waveform_scroll_area(self.waveform)
-
-        rp.addWidget(self.section("TEXTO CIFRADO", self.encrypted_output))
-
-        divider1 = QFrame()
-        divider1.setFrameShape(QFrame.Shape.HLine)
-        divider1.setObjectName("divider")
-        rp.addWidget(divider1)
-
-        rp.addWidget(self.section("BINÁRIO", self.binary_output))
-
-        divider2 = QFrame()
-        divider2.setFrameShape(QFrame.Shape.HLine)
-        divider2.setObjectName("divider")
-        rp.addWidget(divider2)
 
         wave_sec = QWidget()
         wl = QVBoxLayout(wave_sec)
@@ -173,10 +161,23 @@ class SenderWindow(QMainWindow):
         wl.setSpacing(8)
         wl.addWidget(self.label("FORMA DE ONDA — TRITS"))
         wl.addWidget(wave_scroll)
-        rp.addWidget(wave_sec)
+
+        results_splitter = QSplitter(Qt.Orientation.Vertical)
+        results_splitter.setChildrenCollapsible(False)
+        results_splitter.addWidget(self.section("TEXTO CIFRADO", self.encrypted_output))
+        results_splitter.addWidget(self.section("BINÁRIO", self.binary_output))
+        results_splitter.addWidget(wave_sec)
+        results_splitter.setSizes([80, 120, 180])
+        rp.addWidget(results_splitter)
 
         main.addWidget(self.results_panel)
         main.addStretch(1)
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(root)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.setCentralWidget(scroll_area)
 
         self._refresh_ports()
         self.apply_style()
@@ -286,14 +287,28 @@ class SenderWindow(QMainWindow):
         self.connect_btn.setText("Desconectar")
         self.set_serial_status(f"Conectado em {port} @ {baud}.")
         self._update_send_btn()
+        self.read_timer.start()
 
     def disconnect_serial(self) -> None:
+        self.read_timer.stop()
         if self.serial_port and self.serial_port.is_open:
             self.serial_port.close()
         self.serial_port = None
         self.connect_btn.setText("Conectar")
         self.set_serial_status("Desconectado.")
         self._update_send_btn()
+
+    def _read_serial(self) -> None:
+        if not self.serial_port or not self.serial_port.is_open:
+            return
+        try:
+            while self.serial_port.in_waiting > 0:
+                line = self.serial_port.readline().decode("utf-8", errors="replace").strip()
+                if line:
+                    self.set_serial_status(line)
+        except Exception as exc:
+            self.set_serial_status(f"Falha ao ler serial: {exc}")
+            self.disconnect_serial()
 
     def send_payload(self) -> None:
         if not self.payload:
@@ -303,8 +318,8 @@ class SenderWindow(QMainWindow):
             self.show_error("Conecte a porta serial antes de enviar.")
             return
         try:
-            self.serial_port.write(self.payload.encode("utf-8"))
             self.serial_port.flush()
+            self.serial_port.write(self.payload.encode("utf-8"))
         except Exception as exc:
             self.show_error(f"Falha ao enviar: {exc}")
             return
@@ -410,9 +425,26 @@ class SenderWindow(QMainWindow):
                 border: 1px solid #1E2D4A;
                 border-radius: 12px;
             }
-            #divider {
-                color: #1E2D4A;
+            QScrollArea { background: #080D1C; border: none; }
+            QScrollBar:vertical {
+                background: #0F1629;
+                width: 8px;
+                border-radius: 4px;
+                margin: 0;
             }
+            QScrollBar::handle:vertical {
+                background: #1E2D4A;
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover { background: #4F46E5; }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+            QSplitter::handle:vertical {
+                background: #1E2D4A;
+                height: 4px;
+                margin: 2px 0;
+            }
+            QSplitter::handle:vertical:hover { background: #4F46E5; }
             """
         )
 
