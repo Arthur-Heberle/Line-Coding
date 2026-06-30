@@ -50,20 +50,16 @@ class CodecProtocolTests(unittest.TestCase):
 
         payload = format_trits_payload(trits)
 
-        self.assertEqual(payload, "TRITS:-1,0,1,1,0,-1\n")
+        self.assertEqual(payload, "-0++0-\n")
         self.assertEqual(parse_trits_line(payload), trits)
 
-    def test_parse_rejects_missing_prefix(self):
-        with self.assertRaisesRegex(ValueError, "TRITS"):
-            parse_trits_line("-1,0,1,1,0,-1")
-
     def test_parse_rejects_invalid_trit_value(self):
-        with self.assertRaisesRegex(ValueError, "only -1, 0 and 1"):
-            parse_trits_line("TRITS:-1,0,2,1,0,-1")
+        with self.assertRaisesRegex(ValueError, "invalid trit value"):
+            parse_trits_line("-0+x0-")
 
     def test_parse_rejects_non_block_length(self):
         with self.assertRaisesRegex(ValueError, "multiple of 6"):
-            parse_trits_line("TRITS:-1,0,1")
+            parse_trits_line("-0+")
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ void setup() {
 
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
+  esp_wifi_set_ps(WIFI_PS_NONE);
   esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
 
   Serial.print("Receiver MAC: ");

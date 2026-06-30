@@ -5,7 +5,7 @@ import time
 
 # --- CONFIGURAÇÃO DA PORTA SERIAL ---
 # IMPORTANTE: Mude para a porta do seu ESP32 Emissor (no seu log era a COM4)
-PORTA_SERIAL = 'COM4' 
+PORTA_SERIAL = 'COM5' 
 BAUD_RATE = 115200
 
 try:

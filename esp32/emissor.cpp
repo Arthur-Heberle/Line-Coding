@@ -1,4 +1,5 @@
 #include <esp_now.h>
+#include <esp_wifi.h>
 #include <WiFi.h>
 
 // MAC da recetora MASTER
@@ -23,6 +24,9 @@ void OnDataSent(const wifi_tx_info_t *tx_info, esp_now_send_status_t status) {
 void setup() {
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  esp_wifi_set_ps(WIFI_PS_NONE);
+  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
 
   if (esp_now_init() != ESP_OK) {
     return;
@@ -31,7 +35,7 @@ void setup() {
   esp_now_register_send_cb(OnDataSent);
   
   memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-  peerInfo.channel = 0;  
+  peerInfo.channel = 1;
   peerInfo.encrypt = false;
   
   esp_now_add_peer(&peerInfo);

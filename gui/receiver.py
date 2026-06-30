@@ -47,6 +47,7 @@ class ReceiverWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.serial_port = None
+        self._rx_buffer = ""
         self.timer = QTimer(self)
         self.timer.setInterval(50)
         self.timer.timeout.connect(self.read_serial)
@@ -199,6 +200,7 @@ class ReceiverWindow(QMainWindow):
             self.set_status(f"Nao foi possivel abrir {port}: {exc}", error=True)
             return
 
+        self._rx_buffer = ""
         self.connect_button.setText("Desconectar")
         self.set_status(f"Conectado em {port} @ {baud}.")
         self.timer.start()
@@ -216,10 +218,14 @@ class ReceiverWindow(QMainWindow):
             return
 
         try:
-            while self.serial_port.in_waiting > 0:
-                line = self.serial_port.readline().decode("utf-8", errors="replace").strip()
-                if line:
-                    self.process_line(line)
+            data = self.serial_port.read(self.serial_port.in_waiting or 1)
+            if data:
+                self._rx_buffer += data.decode("utf-8", errors="replace")
+                while "\n" in self._rx_buffer:
+                    line, self._rx_buffer = self._rx_buffer.split("\n", 1)
+                    line = line.strip()
+                    if line:
+                        self.process_line(line)
         except Exception as exc:
             self.set_status(f"Falha ao ler serial: {exc}", error=True)
             self.disconnect_serial()

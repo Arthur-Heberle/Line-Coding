@@ -1,10 +1,13 @@
 MAX_ESPNOW_PAYLOAD_BYTES = 240
-PREFIX = "TRITS:"
+PREFIX = ""
+
+_TRIT_TO_CHAR = {-1: "-", 0: "0", 1: "+"}
+_CHAR_TO_TRIT = {"-": -1, "0": 0, "+": 1}
 
 
 def format_trits_payload(trits: list[int], max_payload_bytes: int = MAX_ESPNOW_PAYLOAD_BYTES) -> str:
     _validate_trits(trits)
-    payload = PREFIX + ",".join(str(trit) for trit in trits) + "\n"
+    payload = PREFIX + "".join(_TRIT_TO_CHAR[trit] for trit in trits) + "\n"
 
     if len(payload.encode("utf-8")) > max_payload_bytes:
         raise ValueError(
@@ -18,14 +21,16 @@ def format_trits_payload(trits: list[int], max_payload_bytes: int = MAX_ESPNOW_P
 def parse_trits_line(line: str) -> list[int]:
     line = line.strip()
 
-    if not line.startswith(PREFIX):
-        raise ValueError("Invalid line: expected TRITS: prefix.")
+    #if not line.startswith(PREFIX):
+    #    raise ValueError("Invalid line: expected TRITS: prefix.")
 
-    raw_values = line.removeprefix(PREFIX).split(",")
-    try:
-        trits = [int(value.strip()) for value in raw_values if value.strip()]
-    except ValueError as exc:
-        raise ValueError("Invalid line: trits must be integers.") from exc
+    #line_removed_prefix = line.removeprefix(PREFIX)
+
+    trits = []
+    for c in line:
+        if c not in _CHAR_TO_TRIT:
+            raise ValueError(f"Invalid line: invalid trit value: {c!r}")
+        trits.append(_CHAR_TO_TRIT[c])
 
     if not trits:
         raise ValueError("Invalid line: empty trits payload.")
